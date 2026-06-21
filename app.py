@@ -43,22 +43,26 @@ def dias_por_extenso(n):
         return f"{dezenas[d]} E {unidades[u]}" if u > 0 else dezenas[d]
     return str(n)
 
-# FUNÇÃO DE CONSULTA QUE TRAZ MÚLTIPLAS OPÇÕES DA ESPECIALIDADE
+# FUNÇÃO DE CONSULTA CLÍNICA CALIBRADA PARA ORTOPEDIA DE URGÊNCIA (TRAUMA/FIXADORES)
 def consultar_multiplos_dados_ia(termo_usuario):
     if not termo_usuario or len(termo_usuario) < 3:
         return []
     
     prompt = (
         f"Com base no termo médico, suspeita ou fragmento digitado: '{termo_usuario}', "
-        "identifique as variações e possibilidades cirúrgicas mais comuns do SUS (Ortopedia/Cirurgia Geral).\n"
-        "Retorne OBRIGATORIAMENTE um array JSON contendo até 5 objetos puros (sem markdown, sem aspas triplas de código). "
-        "Cada objeto deve mapear uma patologia específica correspondente ao termo. Use exatamente esta estrutura:\n"
+        "identifique as variações diagnósticas e procedimentos cirúrgicos correspondentes na tabela SIGTAP do SUS.\n"
+        "DIRETRIZ CRÍTICA DE ORTOPEDIA: Se o termo envolver fraturas, traumas ou lesões ortopédicas de urgência, "
+        "você DEVE incluir obrigatoriamente entre as opções tanto o procedimento definitivo (ex: osteossíntese) "
+        "quanto o procedimento de urgência/estabilização inicial correspondente, especificamente a 'TRATAMENTO CIRÚRGICO DE FRATURA COM FIXADOR EXTERNO' "
+        "ou 'INSTALAÇÃO DE FIXADOR EXTERNO' aplicável àquela região anatômica.\n"
+        "Retorne OBRIGATORIAMENTE um array JSON contendo até 6 objetos puros (sem markdown, sem aspas triplas de código). "
+        "Cada objeto deve mapear uma combinação exata de patologia/procedimento. Use rigorosamente esta estrutura:\n"
         "[\n"
         "  {\n"
-        '    "label_exibicao": "NOME DO DIAGNÓSTICO / CIRURGIA COMPLETA EM CAIXA ALTA",\n'
+        '    "label_exibicao": "NOME DO DIAGNÓSTICO / PROCEDIMENTO COMPLETO EM CAIXA ALTA (Ex: OSTEOSSÍNTESE DA TÍBIA ou FIXADOR EXTERNO NA TÍBIA)",\n'
         '    "cid_codigo": "Código CID-10 correspondente",\n'
         '    "cid_descricao": "Descrição oficial na CID-10 em caixa alta",\n'
-        '    "sigtap_codigo": "Código SIGTAP/SUS formatado XX.XX.XX.XXX-X",\n'
+        '    "sigtap_codigo": "Código SIGTAP/SUS de 10 dígitos formatado XX.XX.XX.XXX-X",\n'
         '    "sigtap_descricao": "Nome oficial do procedimento cirúrgico no SIGTAP em caixa alta"\n'
         "  }\n"
         "]"
@@ -106,7 +110,7 @@ if senha == "hrcm":
     elif st.session_state['pagina_atual'] == 'criar':
         if st.button("⬅️ Voltar ao Menu Principal"):
             st.session_state['pagina_atual'] = 'menu'
-            # Limpa buscas anteriores ao sair
+            # Limpa buscas anteriores ao mudar de página
             st.session_state['lista_opcoes_ia'] = []
             st.session_state['cid_selecionado'] = ""
             st.session_state['sigtap_selecionado'] = ""
@@ -119,12 +123,12 @@ if senha == "hrcm":
         
         col_busca1, col_busca2 = st.columns([3, 1])
         with col_busca1:
-            diagnostico_input = st.text_input("Digite a patologia ou estrutura (Ex: hernia, fratura radio, apendicite):", placeholder="Digite e clique em buscar...").strip()
+            diagnostico_input = st.text_input("Digite a patologia, estrutura ou procedimento (Ex: fratura tibia, fixador femur, apendicite):", placeholder="Digite o termo clínico e clique em buscar...").strip()
         with col_busca2:
             st.write("\n\n")
             if st.button("🔍 Buscar Códigos", use_container_width=True):
                 if diagnostico_input:
-                    with st.spinner("Mapeando opções oficiais..."):
+                    with st.spinner("Mapeando opções oficiais e condutas do SUS..."):
                         resultados = consultar_multiplos_dados_ia(diagnostico_input)
                         if resultados:
                             st.session_state['lista_opcoes_ia'] = resultados
@@ -133,18 +137,18 @@ if senha == "hrcm":
                 else:
                     st.warning("Digite algo para buscar.")
 
-        # Exibe o seletor apenas se houver dados na lista da sessão (evita que sumam ao digitar outros campos)
+        # Exibe o seletor apenas se houver dados na lista da sessão
         if st.session_state['lista_opcoes_ia']:
             lista_labels = [opt['label_exibicao'] for opt in st.session_state['lista_opcoes_ia']]
-            selecionado = st.selectbox("🎯 Várias opções encontradas! Selecione o caso exato deste paciente:", lista_labels)
+            selecionado = st.selectbox("🎯 Escolha o diagnóstico ou o procedimento exato realizado neste tempo cirúrgico:", lista_labels)
             
-            # Atualiza as variáveis com base na escolha do médico dentro do selectbox
+            # Atualiza dinamicamente as variáveis de confirmação baseadas no selectbox
             for opt in st.session_state['lista_opcoes_ia']:
                 if opt['label_exibicao'] == selecionado:
                     st.session_state['cid_selecionado'] = f"{opt['cid_codigo']} - {opt['cid_descricao']}"
                     st.session_state['sigtap_selecionado'] = f"{opt['sigtap_codigo']} - {opt['sigtap_descricao']}"
 
-        # Campos de validação final preenchidos dinamicamente pela seleção
+        # Campos de validação final preenchidos de forma estável pela seleção
         st.write("---")
         col_fb1, col_fb2 = st.columns(2)
         with col_fb1:
@@ -168,9 +172,9 @@ if senha == "hrcm":
         st.subheader("3. Detalhes Clínicos Específicos")
         col_det1, col_det2 = st.columns(2)
         with col_det1:
-            regiao_anatomia_raiox = st.text_input("Anatomia para Radiografia (Ex: ABDOME / RÁDIO DISTAL ESQUERDO):").strip().upper()
+            regiao_anatomia_raiox = st.text_input("Anatomia para Radiografia (Ex: ABDOME / TÍBIA E FÍBULA ESQUERDA):").strip().upper()
         with col_det2:
-            tipo_imobilizacao = st.text_input("Tipo de Imobilização / Curativo (Ex: CURATIVO LIMPO / TALA GESSADA):").strip().upper()
+            tipo_imobilizacao = st.text_input("Tipo de Imobilização / Curativo (Ex: CURATIVO LIMPO / FIXADOR EXTERNO):").strip().upper()
             
         justificativa_fisio = st.text_area("Justificativa Clínica para Fisioterapia (Se Ortopedia):").strip().upper()
 
@@ -203,7 +207,7 @@ if senha == "hrcm":
                         else:
                             texto_descricao_final = "".join(linhas).strip()
                     else:
-                        # Prompt calibrado para descrições perfeitas estruturadas
+                        # Prompt rigoroso para gerar passos cirúrgicos cronológicos perfeitos
                         prompt_estrito = (
                             "Você é um cirurgião sênior do SUS experiente em Ortopedia, Traumatologia e Cirurgia Geral. "
                             f"Gere única e estritamente os passos técnicos cronológicos da descrição cirúrgica para o procedimento: [{procedimento_sigtap}]. "
@@ -278,7 +282,7 @@ if senha == "hrcm":
                     )
                     paginas_documento.append(("FICHA DE ENCAMINHAMENTO PARA FISIOTERAPIA", texto_fisioterapia))
 
-                # COMPOSIÇÃO DA DESCRIÇÃO CIRÚRGICA
+                # COMPOSIÇÃO DA FICHA CIRÚRGICA
                 if emitir_cirurgica and texto_descricao_final:
                     nome_cirurgia_limpo = procedimento_sigtap.split(' - ')[1] if ' - ' in procedimento_sigtap else procedimento_sigtap
                     codigo_sus_limpo = procedimento_sigtap.split(' - ')[0] if ' - ' in procedimento_sigtap else ''
@@ -406,7 +410,7 @@ if senha == "hrcm":
                     if st.button(f"Salvar Alterações em {codigo_arquivo}", key=f"btn_{arquivox}"):
                         with open(caminho_completo, "w", encoding="utf-8") as f:
                             f.write(novo_conteudo)
-                        st.success(f"Modelo {codigo_arquivo} updated com sucesso!")
+                        st.success(f"Modelo {codigo_arquivo} atualizado com sucesso!")
                         st.rerun()
 
     # ---------------------------------------------------------
